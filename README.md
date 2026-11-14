@@ -124,7 +124,7 @@ curl localhost:8002/v1/models    # vLLM is ready when this lists the model
 
 # 3. app
 python -m venv venv && source venv/bin/activate
-pip install -r requirements-dev.txt
+pip install -r requirements.txt
 cp -n .env.example .env
 uvicorn app.main:app --reload    # http://localhost:8000/docs
 
@@ -194,34 +194,24 @@ Validation: `user_id`/`session_id` must match `[A-Za-z0-9_.@-]{1,128}`; `message
 ```
 State lives in Redis, so reconnecting with the same `session_id` resumes the conversation.
 
-## Tests
+## Verifying it (plain scripts, run against a live server)
+Start the stack and `uvicorn app.main:app`, then:
 ```bash
-pytest -q                  # 109 unit/behaviour tests, ~2s, no Docker / model / network needed
-pytest -m integration -v   # 10 live-stack tests: real vLLM + Redis + MongoDB + Chroma + Granite
+python -m scripts.e2e_check                     # PASS/FAIL walk-through of the three evaluation criteria
+python -m scripts.load_test --users 50 --messages 4 --concurrency 10            # HTTP concurrency
+python -m scripts.load_test --mode ws --users 20                                 # WebSocket, with time-to-first-token
+python -m scripts.load_test --same-user --users 12                               # race test: one user, parallel writes
+python -m scripts.inspect_mongo --list                                           # users stored in MongoDB
+python -m scripts.inspect_mongo --user alice --history                           # one user's memories + session summaries
+python -m scripts.calibrate_similarity                                           # tune retrieval thresholds
 ```
-**Unit/behaviour tests** run the real service graph with a mock LLM, in-memory stores, an ephemeral Chroma and a
-deterministic fake embedder (`tests/`):
-- `test_chat_flow` - end-to-end through the HTTP API: send → response; memory saved in one session and retrieved in
-  another; follow-up resolved from recent history; **irrelevant memories excluded** from the LLM prompt; corrections
-  update in place; withdrawn plans deleted; per-user isolation; rolling summary; final-summary recall; LLM-outage
-  fallback; idle sweeper; request validation.
-- `test_memory_manager` - list merge, explicit-beats-inferred, history cap, fact de-duplication, invalid ops,
-  one failing op not losing the rest, re-indexing after a Chroma outage, deletes.
-- `test_retrieval` - always-on preference, category vs semantic inclusion, follow-up topic inheritance, "what do you
-  remember" caps, stale index entries, user/session isolation, past-session thresholds.
-- `test_services` - summariser fallbacks, empty/reused sessions, concurrent messages not losing updates, interrupted
-  streams, prompt assembly.
-- `test_units`, `test_api_and_rules_extra` - extraction gate and rules (English/Hinglish), LLM-output guards, keyword
-  detection (incl. Devanagari), Redis (`fakeredis`) and Mongo (`mongomock-motor`) stores, vLLM and Ollama clients
-  against fake HTTP servers, remaining endpoints.
-- `test_websocket` - streaming, end-of-session, bad input, invalid ids, disconnect grace period.
-
-**Integration tests** (`tests/integration/`) are skipped by default and skip cleanly, with the reason, if a service is
-unreachable. They read `.env`, use a throw-away MongoDB database and Chroma prefix, and clean up. Besides the full
-flows (memory recall across sessions, correction, session summary recall, streaming), they check the things the mocks
-cannot: the model returns schema-valid JSON, the LLM can extract a memory no rule covers (`health_focus`), and Granite
-ranks a career memory above a hobby for English and Hindi questions - that test prints the similarity scores, which is
-what to use when tuning `MEMORY_MIN_SIMILARITY` and the summary thresholds.
+`e2e_check` covers: **end-to-end flow** (HTTP + WebSocket chat, session continuity, session end -> summary, a new
+session still knowing the user), **memory handling** (facts saved, questions/small talk not saved, corrections update
+in place with history), and **context relevance** (with six memories stored, a career question sends only the career
+and language memories; an unrelated question sends only the language preference - `"debug": true` in `POST /chat`
+shows what was considered vs. sent). `load_test` reports throughput, latency percentiles, errors and degraded replies,
+then checks that every user's memories were really written and that parallel updates for one user were not lost.
+All scripts have `--help`.
 
 ## Design decisions and trade-offs
 - **Closed memory vocabulary** over free-form keys: reliable updates with small models, at the cost of coverage
@@ -244,11 +234,7 @@ what to use when tuning `MEMORY_MIN_SIMILARITY` and the summary thresholds.
 - Small models are weak at nuanced extraction and Hindi; the rules/validation layers exist to compensate.
 - vLLM's advantage is concurrent throughput (continuous batching, paged KV cache). For a single-user demo it is not
   automatically faster than Ollama/llama.cpp, and it needs a CUDA GPU (or the vllm-metal plugin on a Mac).
-- The vLLM client is tested against a fake HTTP server (request shape, SSE streaming, JSON-schema requests, errors),
-  not against a live vLLM instance.
 - `docker-compose.yml` uses `:latest` for Chroma and vLLM; pin release tags (Chroma's must match the `chromadb` client you install).
-- The vLLM compose service has not been run on a GPU yet; if the model fails to load, check `docker compose logs vllm`
-  (typical causes: missing `HF_TOKEN` / un-accepted Llama license, or `VLLM_GPU_MEMORY_UTILIZATION` too high for the card).
 
 ## Layout
 ```
@@ -259,6 +245,6 @@ app/
   memory/     schema (slot vocabulary)  rules (gate + regex extraction)  categories (query keywords)
   stores/     redis_session_store  mongo_memory_store  vector_store  inmemory  base
   llm/        base  openai_compat (vLLM)  ollama  mock     embeddings/  base (Granite + fake)
-scripts/     calibrate_similarity (threshold tuning for the real embedder)
-cli.py  docker-compose.yml  tests/
+scripts/     e2e_check  load_test  inspect_mongo  calibrate_similarity (threshold tuning for the real embedder)
+cli.py  docker-compose.yml
 ```
