@@ -74,11 +74,18 @@ Three sources, three mechanisms:
   "What do you remember about me?" (no category) returns everything up to `MEMORY_RECALL_MAX`.
 - **Past sessions** — semantic search over finished-session summaries, excluding the live session, above a threshold.
 
-**Thresholds must be calibrated per embedding model.** Real cosine scores are compressed: in the first live run Granite-97M
-scored a relevant memory ~0.90 and an unrelated one ~0.79, so a naive 0.45 cut-off let "interests: cricket" into a career
-answer. Hence the high floors plus the relative margin. The defaults are provisional; run
-`python -m scripts.calibrate_similarity` to print scores for labelled English/Hindi/Hinglish cases, sweep thresholds, and
-suggest `.env` values (edit the cases in that file to match your users' phrasing).
+**Thresholds must be calibrated per embedding model.** Real cosine scores are compressed, so the floors are high and a
+relative margin does most of the work. `python -m scripts.calibrate_similarity` prints scores for labelled
+English/Hindi/Hinglish cases, sweeps thresholds and recommends `.env` values (edit its cases to match your users).
+
+*Calibration notes (Granite-97M, small labelled set):*
+- Relevant memories scored 0.75-0.92, unrelated ones 0.70-0.84: the ranges **overlap**, so embeddings alone cannot
+  decide. The category keywords are what make retrieval dependable; semantic search adds recall for paraphrases.
+- Devanagari Hindi embeds well (0.887 for a career question). **Romanised Hinglish embeds poorly** (0.749, below
+  unrelated noise), so Hinglish relies on the keyword list in `app/memory/categories.py` - extend it for your users.
+- `MEMORY_MIN_SIMILARITY=0.85` gave no wrong semantic inclusions; a looser 0.82 maximises F1 but leaks (e.g. a career
+  goal into a hobby question). A leak is costlier than a miss, so the default favours precision.
+- Session summaries separated cleanly (relevant >= 0.877, unrelated <= 0.818): floor 0.85; recall mode 0.83.
 
 `context_used` lists exactly what reached the LLM (`career_goal`, `session_summary:<id>`, `conversation_summary`, …).
 Send `"debug": true` to also get scores and the list of excluded memories.

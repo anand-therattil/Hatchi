@@ -42,6 +42,11 @@ MEMORY_QUESTIONS = [
     ("Will I be able to buy a house soon?", {"financial_goal"}),
     ("When will I get married?", {"relationship_status"}),
     ("How can I improve my health?", {"health_focus"}),
+    # paraphrases with NO category keyword: only the semantic path can find these
+    ("Is now the right moment to move to a new organisation?", {"career_goal"}),
+    ("Will I be able to afford my own place soon?", {"financial_goal"}),
+    ("Why does my back keep hurting?", {"health_focus"}),
+    ("What should I do on weekends to relax?", {"interests"}),
     ("Tell me about Saturn", set()),
     ("What is my lucky number?", set()),
 ]
@@ -55,6 +60,7 @@ SUMMARY_QUESTIONS = [
     ("Remind me what you said about changing careers", {"career_talk"}),
     ("मैंने नौकरी बदलने के बारे में क्या पूछा था?", {"career_talk"}),
     ("What did you say about buying a house?", {"money_talk"}),
+    ("Did I ask you about moving to a new company?", {"career_talk"}),
     ("Tell me about Saturn", set()),
     ("Will I get married soon?", set()),
 ]
@@ -95,7 +101,7 @@ def evaluate(rows: list[Row], threshold: float, margin: float) -> tuple[int, int
     return tp, fp, fn
 
 
-def report(title: str, rows: list[Row], margin: float) -> float:
+def report(title: str, rows: list[Row], margin: float) -> dict:
     print(f"\n=== {title} " + "=" * (66 - len(title)))
     question = None
     for r in rows:
@@ -124,11 +130,37 @@ def report(title: str, rows: list[Row], margin: float) -> float:
         if f1 >= best[0]:
             best = (f1, t)
         print(f"                          {t:.2f}       {precision:.2f}      {recall:.2f}    {f1:.2f}")
-    if best[0] == 0.0:
-        print("\n  -> no threshold retrieves anything relevant: check the embedder / prefixes before tuning")
-    else:
-        print(f"\n  -> best F1 {best[0]:.2f} at threshold {best[1]:.2f}")
-    return best[1]
+    print(f"\n  best F1 {best[0]:.2f} at threshold {best[1]:.2f}  (F1 weighs a leak and a miss equally)")
+
+    rec = recommend(rows, margin)
+    if rec is None:
+        print("  -> no threshold gives >=95% precision with any recall: check the embedder / prefixes before tuning")
+        return {"threshold": best[1], "max_unrelated": max(irr)}
+    low, mid, high, recall = rec
+    print(f"  -> PRECISION-FIRST: thresholds {low:.3f}-{high:.3f} keep >=95% precision at recall {recall:.2f}; "
+          f"recommend {mid:.3f} (middle of that range)")
+    return {"threshold": mid, "max_unrelated": max(irr)}
+
+
+def recommend(rows: list[Row], margin: float, min_precision: float = 0.95):
+    """Highest-recall thresholds that still keep precision >= min_precision; returns (low, middle, high, recall).
+
+    A wrong memory in the prompt is costlier than a missed one (category keywords rescue many misses), and the
+    middle of the working range is safer than its edge.
+    """
+    best_recall, ok = 0.0, []
+    for i in range(500, 991, 5):
+        t = i / 1000
+        tp, fp, fn = evaluate(rows, t, margin)
+        precision = tp / (tp + fp) if tp + fp else 1.0
+        recall = tp / (tp + fn) if tp + fn else 0.0
+        if precision < min_precision or recall == 0.0:
+            continue
+        if recall > best_recall + 1e-9:
+            best_recall, ok = recall, [t]
+        elif abs(recall - best_recall) <= 1e-9:
+            ok.append(t)
+    return (ok[0], ok[len(ok) // 2], ok[-1], best_recall) if ok else None
 
 
 def main() -> None:
@@ -139,14 +171,15 @@ def main() -> None:
 
     embedder = build_embedder(settings)
     print(f"embedding backend: {settings.embedding_backend} ({settings.embedding_model})")
-    mem_t = report("MEMORIES", score(embedder, MEMORIES, MEMORY_QUESTIONS), args.margin)
-    sum_t = report("SESSION SUMMARIES", score(embedder, SUMMARIES, SUMMARY_QUESTIONS), args.margin)
+    mem = report("MEMORIES", score(embedder, MEMORIES, MEMORY_QUESTIONS), args.margin)
+    summ = report("SESSION SUMMARIES", score(embedder, SUMMARIES, SUMMARY_QUESTIONS), args.margin)
 
     print("\nSuggested .env (re-run after editing the cases above to match real phrasing):")
-    print(f"  MEMORY_MIN_SIMILARITY={mem_t:.2f}")
-    print(f"  SUMMARY_MIN_SIMILARITY={sum_t:.2f}")
+    print(f"  MEMORY_MIN_SIMILARITY={mem['threshold']:.2f}")
+    print(f"  SUMMARY_MIN_SIMILARITY={summ['threshold']:.2f}")
+    print(f"  SUMMARY_RECALL_MIN_SIMILARITY={summ['max_unrelated'] + 0.015:.2f}   "
+          "(just above the highest unrelated summary score seen)")
     print(f"  SEMANTIC_MARGIN={args.margin}")
-    print("  (SUMMARY_RECALL_MIN_SIMILARITY: set a few points below SUMMARY_MIN_SIMILARITY)")
 
 
 if __name__ == "__main__":
