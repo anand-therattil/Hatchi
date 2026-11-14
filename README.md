@@ -176,14 +176,32 @@ State lives in Redis, so reconnecting with the same `session_id` resumes the con
 
 ## Tests
 ```bash
-pytest -q          # 54 tests, a few seconds, no Docker / model / network needed
+pytest -q                  # 107 unit/behaviour tests, ~2s, no Docker / model / network needed
+pytest -m integration -v   # 9 live-stack tests: real vLLM + Redis + MongoDB + Chroma + Granite
 ```
-They run the real service graph with a mock LLM, in-memory stores, an ephemeral Chroma and a deterministic fake
-embedder. Covered: send → response; memory saved in one session and retrieved in another; follow-up resolved from
-recent history; **irrelevant memories excluded** from the LLM prompt; corrections update in place (and the vector
-index); withdrawn plans are deleted; per-user isolation; rolling summary keeps the window bounded; final summary
-recalled in a later session; LLM outage fallback; idle sweeper; WebSocket streaming/end/disconnect/validation;
-extraction gate, rules and LLM-output guards; and the Redis (`fakeredis`) and Mongo (`mongomock-motor`) stores.
+**Unit/behaviour tests** run the real service graph with a mock LLM, in-memory stores, an ephemeral Chroma and a
+deterministic fake embedder (`tests/`):
+- `test_chat_flow` - end-to-end through the HTTP API: send → response; memory saved in one session and retrieved in
+  another; follow-up resolved from recent history; **irrelevant memories excluded** from the LLM prompt; corrections
+  update in place; withdrawn plans deleted; per-user isolation; rolling summary; final-summary recall; LLM-outage
+  fallback; idle sweeper; request validation.
+- `test_memory_manager` - list merge, explicit-beats-inferred, history cap, fact de-duplication, invalid ops,
+  one failing op not losing the rest, re-indexing after a Chroma outage, deletes.
+- `test_retrieval` - always-on preference, category vs semantic inclusion, follow-up topic inheritance, "what do you
+  remember" caps, stale index entries, user/session isolation, past-session thresholds.
+- `test_services` - summariser fallbacks, empty/reused sessions, concurrent messages not losing updates, interrupted
+  streams, prompt assembly.
+- `test_units`, `test_api_and_rules_extra` - extraction gate and rules (English/Hinglish), LLM-output guards, keyword
+  detection (incl. Devanagari), Redis (`fakeredis`) and Mongo (`mongomock-motor`) stores, vLLM and Ollama clients
+  against fake HTTP servers, remaining endpoints.
+- `test_websocket` - streaming, end-of-session, bad input, invalid ids, disconnect grace period.
+
+**Integration tests** (`tests/integration/`) are skipped by default and skip cleanly, with the reason, if a service is
+unreachable. They read `.env`, use a throw-away MongoDB database and Chroma prefix, and clean up. Besides the full
+flows (memory recall across sessions, correction, session summary recall, streaming), they check the things the mocks
+cannot: the model returns schema-valid JSON, the LLM can extract a memory no rule covers (`health_focus`), and Granite
+ranks a career memory above a hobby for English and Hindi questions - that test prints the similarity scores, which is
+what to use when tuning `MEMORY_MIN_SIMILARITY` and the summary thresholds.
 
 ## Design decisions and trade-offs
 - **Closed memory vocabulary** over free-form keys: reliable updates with small models, at the cost of coverage

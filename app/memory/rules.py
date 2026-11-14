@@ -54,12 +54,12 @@ _CAREER_SWITCH = re.compile(
     re.IGNORECASE,
 )
 _CAREER_BUSINESS = re.compile(
-    r"\b(?:plan|want|hope|aim|try|look|going|intend)\w*\s+(?:to\s+)?(?:start|launch|begin|open)\s+"
+    r"\b(?:plan|want|hop|aim|try|look|going|intend)\w*\s+(?:to\s+)?(?:start|launch|begin|open)\s+"
     r"(?:my\s+own|a|an|my)\s+(?:own\s+)?(?:business|startup|company|firm)\b[^.;!?]*",
     re.IGNORECASE,
 )
 _CAREER_PROMO = re.compile(
-    r"\b(?:plan|want|hope|aim|try|look|going)\w*\s+(?:to\s+)?(?:get\s+)?(?:a\s+)?promot\w+[^.;!?]*",
+    r"\b(?:plan|want|hop|aim|try|look|going)\w*\s+(?:to\s+)?(?:get\s+)?(?:a\s+)?promot\w+[^.;!?]*",
     re.IGNORECASE,
 )
 
@@ -83,7 +83,7 @@ _REL_STATUS = re.compile(
     re.IGNORECASE,
 )
 _REL_GOAL = re.compile(
-    r"\b(?:plan|want|hope|look|think)\w*\s+(?:to\s+)?(?:get married|marry|have a baby|settle down|"
+    r"\b(?:plan|want|hop|look|think)\w*\s+(?:to\s+)?(?:get married|marry|have a baby|settle down|"
     r"get engaged)\b[^.;!?]*",
     re.IGNORECASE,
 )

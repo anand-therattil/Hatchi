@@ -23,10 +23,16 @@ class VectorHit:
 
 class VectorStore:
     def __init__(self, client, embedder: Embedder, prefix: str = "hatchi"):
+        self._client = client
         cosine = {"hnsw:space": "cosine"}
         self._memories = client.get_or_create_collection(f"{prefix}_memories", metadata=cosine)
         self._summaries = client.get_or_create_collection(f"{prefix}_session_summaries", metadata=cosine)
         self._embedder = embedder
+
+    async def drop(self) -> None:
+        """Delete both collections (test teardown / full re-index)."""
+        for collection in (self._memories, self._summaries):
+            await asyncio.to_thread(self._client.delete_collection, collection.name)
 
     # ---- helpers -----------------------------------------------------------
     @staticmethod

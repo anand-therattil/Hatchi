@@ -16,18 +16,19 @@ class Embedder(Protocol):
 class GraniteEmbedder:
     """ibm-granite/granite-embedding-97m-multilingual-r2 via sentence-transformers (384-dim)."""
 
+    _models: dict = {}  # loaded once per process and shared by every instance
+
     def __init__(self, model_name: str, query_prefix: str = "", doc_prefix: str = ""):
         self._model_name = model_name
         self._query_prefix = query_prefix
         self._doc_prefix = doc_prefix
-        self._model = None
 
     def _load(self):
-        if self._model is None:
+        if self._model_name not in self._models:
             from sentence_transformers import SentenceTransformer  # lazy: heavy import
 
-            self._model = SentenceTransformer(self._model_name, device="cpu")
-        return self._model
+            self._models[self._model_name] = SentenceTransformer(self._model_name, device="cpu")
+        return self._models[self._model_name]
 
     def _encode(self, texts: list[str]) -> list[list[float]]:
         vectors = self._load().encode(texts, normalize_embeddings=True, convert_to_numpy=True)
