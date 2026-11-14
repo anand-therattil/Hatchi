@@ -63,6 +63,7 @@ class Retriever:
             await add(memory, hit.similarity)  # a vector hit with no Mongo doc is stale: skipped
 
         # ---- score + select ------------------------------------------------------
+        top_sim = max((sim for _, sim in candidates.values()), default=0.0)
         always, others = [], []
         for memory, sim in candidates.values():
             reasons = []
@@ -70,7 +71,7 @@ class Retriever:
                 reasons.append("always_on")
             if memory.category in categories:
                 reasons.append("category")
-            if sim >= s.memory_min_similarity:
+            if sim >= s.memory_min_similarity and sim >= top_sim - s.semantic_margin:
                 reasons.append("semantic")
             if recall and not categories:
                 reasons.append("recall")
@@ -86,10 +87,12 @@ class Retriever:
 
         # ---- past session summaries -----------------------------------------------
         threshold = s.summary_recall_min_similarity if recall else s.summary_min_similarity
+        hits = await self._vectors.search_summaries(user_id, query, session_id, k=s.summary_top_k)
+        best = hits[0].similarity if hits else 0.0
         past = [
             RetrievedSummary(session_id=h.key, summary=h.document, similarity=round(h.similarity, 4))
-            for h in await self._vectors.search_summaries(user_id, query, session_id, k=s.summary_top_k)
-            if h.similarity >= threshold
+            for h in hits
+            if h.similarity >= threshold and h.similarity >= best - s.semantic_margin
         ]
 
         return RetrievalResult(
@@ -101,6 +104,7 @@ class Retriever:
                 "recall_intent": recall,
                 "query": query,
                 "considered": len(candidates),
+                "top_similarity": round(top_sim, 4),
                 "excluded": sorted(k for k in candidates if k not in {r.memory.key for r in selected}),
                 "memory_scores": {r.memory.key: {"score": r.score, "sim": r.similarity, "why": r.reasons} for r in selected},
             },

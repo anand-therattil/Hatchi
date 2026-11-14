@@ -112,3 +112,24 @@ async def test_current_session_and_other_users_summaries_are_excluded(container)
     await _summary(container, "theirs", "career timing and astrology guidance", user="someone-else")
     result = await retrieve(container, "career timing question", session="current")
     assert result.past_sessions == []
+
+
+# ---- relative margin: real embedding scores are compressed, so "above the floor" is not enough ----------------------
+async def test_weaker_semantic_hit_is_dropped_when_a_much_better_one_exists(make_container):
+    loose = dict(memory_min_similarity=0.2)                                    # both clear the absolute floor ...
+    strict = make_container(semantic_margin=0.1, **loose)
+    off = make_container(semantic_margin=1.0, **loose)                         # ... margin disabled
+    for container in (strict, off):
+        await seed(container, save("interests", "astronomy telescope stargazing"), save("location", "telescope shop downtown"))
+
+    question = "telescope stargazing astronomy"                                # no category keyword
+    assert (await retrieve(strict, question)).context_used == ["interests"]
+    assert sorted((await retrieve(off, question)).context_used) == ["interests", "location"]
+    assert (await retrieve(strict, question)).debug["top_similarity"] > 0.8
+
+
+async def test_weaker_past_session_is_dropped_when_a_much_better_one_exists(container):
+    await _summary(container, "close", "career timing astrology guidance")
+    await _summary(container, "weak", "guidance about gardening")
+    result = await retrieve(container, "career timing astrology guidance question")
+    assert [p.session_id for p in result.past_sessions] == ["close"]

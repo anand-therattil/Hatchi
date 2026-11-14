@@ -205,3 +205,14 @@ async def test_streaming_reply_over_the_real_model(stack):
 
     result = await stack.chat.chat(uid(), "s1", "Give me one sentence of encouragement.", on_token=on_token)
     assert len(tokens) > 1 and "".join(tokens).strip() == result.response and not result.degraded
+
+
+async def test_unrelated_question_does_not_pull_in_an_old_session_summary(stack):
+    """Guards the summary thresholds: with compressed Granite scores a loose default would admit anything."""
+    user = uid()
+    await stack.chat.chat(user, "s1", "I'm planning to switch jobs next year and I'm nervous about the timing.")
+    await stack.chat.drain()
+    await stack.chat.end_session(user, "s1")
+
+    result = await stack.chat.chat(user, "s2", "Tell me about Saturn")
+    assert not [c for c in result.context_used if c.startswith("session_summary:")], result.debug

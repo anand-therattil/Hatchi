@@ -50,13 +50,17 @@ class Settings(BaseSettings):
     ws_disconnect_grace_seconds: float = 60.0
 
     # --- retrieval --------------------------------------------------------
+    # Cosine scores from real embedding models are compressed: with Granite-97M a *relevant* memory scored ~0.90
+    # and an *unrelated* one ~0.79. So absolute cut-offs must be high, and a relative margin (how far below the
+    # best hit a result may fall) does most of the work. PROVISIONAL - run `python -m scripts.calibrate_similarity`.
     memory_top_k: int = 5
     memory_recall_max: int = 8
-    memory_min_similarity: float = 0.45
+    memory_min_similarity: float = 0.85
+    semantic_margin: float = 0.10       # semantic-only hits must be within this of the best hit
     category_boost: float = 0.5
     summary_top_k: int = 2
-    summary_min_similarity: float = 0.5
-    summary_recall_min_similarity: float = 0.25
+    summary_min_similarity: float = 0.85
+    summary_recall_min_similarity: float = 0.75   # lower bar when the user explicitly asks about the past
     fact_dedupe_similarity: float = 0.9
 
     log_level: str = "INFO"

@@ -20,8 +20,8 @@ def make_settings(**overrides) -> Settings:
     base = dict(
         storage_backend="memory", vector_backend="ephemeral", llm_backend="mock", embedding_backend="fake",
         sweeper_enabled=False,
-        # the fake embedder only scores word overlap, so use gentler thresholds than the Granite defaults
-        summary_min_similarity=0.2, summary_recall_min_similarity=0.1,
+        # the fake embedder only scores word overlap (0..1), so use gentler thresholds than the Granite defaults
+        memory_min_similarity=0.45, summary_min_similarity=0.2, summary_recall_min_similarity=0.1,
         chroma_collection_prefix=f"t{uuid.uuid4().hex[:8]}",  # Ephemeral Chroma is process-global
     )
     base.update(overrides)

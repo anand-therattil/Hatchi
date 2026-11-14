@@ -67,11 +67,18 @@ Three sources, three mechanisms:
   "Why do you say that?" work; short follow-ups also inherit the previous turn's topic and query).
 - **Long-term facts** — candidates = *category match* (keyword stems, English + Hindi/Hinglish) ∪ *semantic search*
   (Chroma, filtered by `user_id`). A memory is included if it is an always-on standing preference
-  (`language_preference`), **or** its category matches the question, **or** similarity ≥ `MEMORY_MIN_SIMILARITY`.
+  (`language_preference`), **or** its category matches the question, **or** it is a strong semantic hit:
+  similarity ≥ `MEMORY_MIN_SIMILARITY` **and** within `SEMANTIC_MARGIN` of the best hit for that question.
   Then ranked by `similarity + category boost + confidence` and capped at `MEMORY_TOP_K`.
   A career question therefore gets career goals, not "interests: cricket".
   "What do you remember about me?" (no category) returns everything up to `MEMORY_RECALL_MAX`.
 - **Past sessions** — semantic search over finished-session summaries, excluding the live session, above a threshold.
+
+**Thresholds must be calibrated per embedding model.** Real cosine scores are compressed: in the first live run Granite-97M
+scored a relevant memory ~0.90 and an unrelated one ~0.79, so a naive 0.45 cut-off let "interests: cricket" into a career
+answer. Hence the high floors plus the relative margin. The defaults are provisional; run
+`python -m scripts.calibrate_similarity` to print scores for labelled English/Hindi/Hinglish cases, sweep thresholds, and
+suggest `.env` values (edit the cases in that file to match your users' phrasing).
 
 `context_used` lists exactly what reached the LLM (`career_goal`, `session_summary:<id>`, `conversation_summary`, …).
 Send `"debug": true` to also get scores and the list of excluded memories.
@@ -176,8 +183,8 @@ State lives in Redis, so reconnecting with the same `session_id` resumes the con
 
 ## Tests
 ```bash
-pytest -q                  # 107 unit/behaviour tests, ~2s, no Docker / model / network needed
-pytest -m integration -v   # 9 live-stack tests: real vLLM + Redis + MongoDB + Chroma + Granite
+pytest -q                  # 109 unit/behaviour tests, ~2s, no Docker / model / network needed
+pytest -m integration -v   # 10 live-stack tests: real vLLM + Redis + MongoDB + Chroma + Granite
 ```
 **Unit/behaviour tests** run the real service graph with a mock LLM, in-memory stores, an ephemeral Chroma and a
 deterministic fake embedder (`tests/`):
@@ -239,5 +246,6 @@ app/
   memory/     schema (slot vocabulary)  rules (gate + regex extraction)  categories (query keywords)
   stores/     redis_session_store  mongo_memory_store  vector_store  inmemory  base
   llm/        base  openai_compat (vLLM)  ollama  mock     embeddings/  base (Granite + fake)
+scripts/     calibrate_similarity (threshold tuning for the real embedder)
 cli.py  docker-compose.yml  tests/
 ```

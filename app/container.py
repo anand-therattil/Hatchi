@@ -117,6 +117,12 @@ def assemble(
     )
 
 
+def build_embedder(settings: Settings) -> Embedder:
+    if settings.embedding_backend == "fake":
+        return FakeEmbedder()
+    return GraniteEmbedder(settings.embedding_model, settings.embedding_query_prefix, settings.embedding_doc_prefix)
+
+
 def build_container(settings: Settings) -> Container:
     closers: list = []
 
@@ -148,12 +154,7 @@ def build_container(settings: Settings) -> Container:
         vector_client = chromadb.EphemeralClient()
 
     # ---- providers ------------------------------------------------------------
-    if settings.embedding_backend == "fake":
-        embedder: Embedder = FakeEmbedder()
-    else:
-        embedder = GraniteEmbedder(
-            settings.embedding_model, settings.embedding_query_prefix, settings.embedding_doc_prefix
-        )
+    embedder = build_embedder(settings)
 
     if settings.llm_backend == "mock":
         llm: LLMClient = MockLLM()
