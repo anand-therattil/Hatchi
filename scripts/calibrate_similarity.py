@@ -175,9 +175,9 @@ def main() -> None:
     summ = report("SESSION SUMMARIES", score(embedder, SUMMARIES, SUMMARY_QUESTIONS), args.margin)
 
     print("\nSuggested .env (re-run after editing the cases above to match real phrasing):")
-    print(f"  MEMORY_MIN_SIMILARITY={mem['threshold']:.2f}")
-    print(f"  SUMMARY_MIN_SIMILARITY={summ['threshold']:.2f}")
-    print(f"  SUMMARY_RECALL_MIN_SIMILARITY={summ['max_unrelated'] + 0.015:.2f}   "
+    print(f"  MEMORY_MIN_SIMILARITY={mem['threshold']:.3f}")
+    print(f"  SUMMARY_MIN_SIMILARITY={summ['threshold']:.3f}")
+    print(f"  SUMMARY_RECALL_MIN_SIMILARITY={summ['max_unrelated'] + 0.015:.3f}   "
           "(just above the highest unrelated summary score seen)")
     print(f"  SEMANTIC_MARGIN={args.margin}")
 

@@ -78,14 +78,20 @@ Three sources, three mechanisms:
 relative margin does most of the work. `python -m scripts.calibrate_similarity` prints scores for labelled
 English/Hindi/Hinglish cases, sweeps thresholds and recommends `.env` values (edit its cases to match your users).
 
-*Calibration notes (Granite-97M, small labelled set):*
-- Relevant memories scored 0.75-0.92, unrelated ones 0.70-0.84: the ranges **overlap**, so embeddings alone cannot
-  decide. The category keywords are what make retrieval dependable; semantic search adds recall for paraphrases.
+*Calibration notes (Granite-97M; 12 relevant and 86 unrelated memory pairs, 5 relevant and 9 unrelated summary pairs):*
+- Relevant memories scored 0.75-0.92, unrelated ones 0.69-0.84: the ranges **overlap**, so embeddings alone cannot
+  decide. The category keywords make retrieval dependable; semantic search adds recall for paraphrases with no
+  keyword (3 of 4 such cases were found at 0.85-0.87).
+- The safe window is **thin**: the highest unrelated memory scored 0.835 and the weakest paraphrase hit 0.854, so only
+  0.840-0.850 keeps >=95% precision. The default (0.845) is the middle of that window. A short, generic memory such as
+  "career goal: ..." acts as a hub that scores high against many unrelated questions - hence the margin rule.
 - Devanagari Hindi embeds well (0.887 for a career question). **Romanised Hinglish embeds poorly** (0.749, below
   unrelated noise), so Hinglish relies on the keyword list in `app/memory/categories.py` - extend it for your users.
-- `MEMORY_MIN_SIMILARITY=0.85` gave no wrong semantic inclusions; a looser 0.82 maximises F1 but leaks (e.g. a career
-  goal into a hobby question). A leak is costlier than a miss, so the default favours precision.
-- Session summaries separated cleanly (relevant >= 0.877, unrelated <= 0.818): floor 0.85; recall mode 0.83.
+- Misses are conservative by design: "what should I do on weekends to relax?" did not retrieve `interests` (0.752).
+  A leak is costlier than a miss, so the defaults favour precision.
+- Session summaries separated by only 0.02 (relevant >= 0.838, unrelated <= 0.818): floor 0.83 for both normal and
+  recall mode. The sample is small and real summaries are longer, LLM-written text - re-run the script with your data.
+- Changing the embedding dtype/model or the memory text templates shifts every score: re-run the calibration after.
 
 `context_used` lists exactly what reached the LLM (`career_goal`, `session_summary:<id>`, `conversation_summary`, …).
 Send `"debug": true` to also get scores and the list of excluded memories.

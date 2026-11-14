@@ -56,12 +56,12 @@ class Settings(BaseSettings):
     # re-run `python -m scripts.calibrate_similarity` if you change the embedding model.
     memory_top_k: int = 5
     memory_recall_max: int = 8
-    memory_min_similarity: float = 0.85
+    memory_min_similarity: float = 0.845
     semantic_margin: float = 0.10       # semantic-only hits must be within this of the best hit
     category_boost: float = 0.5
     summary_top_k: int = 2
-    summary_min_similarity: float = 0.85
-    summary_recall_min_similarity: float = 0.83   # slightly lower bar when the user asks about the past
+    summary_min_similarity: float = 0.83
+    summary_recall_min_similarity: float = 0.83   # no room below the normal floor: unrelated summaries reach ~0.82
     fact_dedupe_similarity: float = 0.9
 
     log_level: str = "INFO"
